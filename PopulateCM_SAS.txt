@@ -1,0 +1,158 @@
+
+**********************calling datasets******************;
+
+options missing='' mgen;
+
+%xudata1(cm adsl, sort=usubjid);
+
+proc format;
+ value $ rte 
+ "ORAL"="ORAL"
+ "INTRAVENOUS"="INTRAVENOUS"
+ "NASAL"="INTRANASAL"
+ "TOPICAL"="TOPICAL"
+ "INTRAMUSCULAR"="INTRAMUSCULAR"
+ "SUBCUTANEOUS"="SUBCUTANEOUS"
+ "RESPIRATORY (INHALATION)"="INHALATION"
+ 'OTHER-TRANSDERMAL'='OTHER-TRANSDERMAL'
+ ;
+RUN;
+                 ********************merging both adsl and cm dataset********;
+data listing;*keep=col1-col8 sort);
+   length col6 $ 30 col8 col9 col91 $ 100 CMSTDTC1 $20;
+	merge adsl(in=in1 where=(FASFL="Y")) cm(in=in2);
+	by usubjid;
+	if in1 and in2;
+	if substr(subjid,1,1)^="S";
+		col1 = strip(subjid);	
+				
+		CMDECOD=scan(CMDECOD,1,'/');
+		col3=(compbl(CMDECOD||"*"||CMTRT));
+		
+		if lowcase(strip(cmindc)) in ('birth control' 'oral contraception' 'herpes simplex lip' 'tension headache')then cmindc=lowcase(cmindc);	
+		col4=strip(cmindc);
+		col5=strip(PUT(cmroute,$rte.));
+
+		if ^missing(CMSTDY)  then do;
+		if (CMSTDY)<0 then CMSTDY=CMSTDY+1;
+		end;
+		if  ^missing(CMENDY) then do;
+		if (CMENDY)<0 then CMENDY=CMENDY+1;
+		end;
+
+		if ^missing(CMSTDTC) then do;
+    		if length(compress(CMSTDTC))=7 then do;
+				CMSTDTN=input(compress(CMSTDTC)||"-01", is8601da.);
+				CMSTDTC=substr(strip(put(CMSTDTN, date9.)),3);
+				CMSTDTC="-"||strip(substr(CMSTDTC,1,3))||'-'||strip(substr(CMSTDTC,4));
+		end;
+
+		if length(compress(CMSTDTC))=4 then do;
+				CMSTDTN=input(compress(CMSTDTC)||"-01-01", is8601da.);
+				CMSTDTC="--"||substr(strip(put(CMSTDTN, date9.)),6);
+		end;
+
+
+		if length(compress(CMSTDTC))=10 then do;
+				CMSTDTN=input(compress(CMSTDTC), is8601da.);
+				CMSTDTC=strip(put(CMSTDTN, date9.));
+				CMSTDTC=strip(substr(CMSTDTC,1,2))||'-'||strip(substr(CMSTDTC,3,3))||'-'||strip(substr(CMSTDTC,6));
+		end;
+		end;
+	  
+ 		if ^missing(CMENDTC) then do;
+		    if length(compress(CMENDTC))=7 then do;
+				CMENDTN=input(compress(CMENDTC)||"-01", is8601da.);
+				CMENDTC=substr(strip(put(CMENDTN, date9.)),3);
+				CMENDTC="-"||strip(substr(CMENDTC,1,3))||'-'||strip(substr(CMENDTC,4));
+		end;
+
+		if length(compress(CMENDTC))=4 then do;
+				CMENDTN=input(compress(CMENDTC)||"-01-01", is8601da.);
+				CMENDTC="--"||substr(strip(put(CMENDTN, date9.)),6);
+		end;
+
+
+		if length(compress(CMENDTC))=10 then do;
+				CMENDTN=input(compress(CMENDTC), is8601da.);
+				CMENDTC=strip(put(CMENDTN, date9.));
+				CMENDTC=strip(substr(CMENDTC,1,2))||'-'||strip(substr(CMENDTC,3,3))||'-'||strip(substr(CMENDTC,6));
+		end;
+		end;
+		
+		
+		if ^missing(CMSTDTC)then do;
+		     if length(compress(CMSTDTC))=6 then CMSTDTC1="$    "||strip(CMSTDTC);   
+		     else if length(compress(CMSTDTC))=9 then CMSTDTC1="$ "||strip(CMSTDTC);
+		     else CMSTDTC1=strip(CMSTDTC);
+		end;
+
+		if ^missing(CMSTDY) then col6=strip(CMSTDTC1)||" ("||right(put(CMSTDY, 5.))||")";
+		else col6=CMSTDTC1;	
+		
+		
+		if ^missing(CMENDTC)then do;
+		    if length(compress(CMENDTC))=6 then CMENDTC1="$    "||strip(CMENDTC);   
+		    else if length(compress(CMENDTC))=9 then CMENDTC1="$ "||strip(CMENDTC); 
+		    else CMENDTC1=strip(CMENDTC);
+		end; 
+
+		if ^missing(CMENDY) then col8=strip(CMENDTC1)||" ("||right(put(CMENDY, 5.))||")";
+			else col8=CMENDTC1;
+			col9=propcase(strip(col6)||"*"||strip(trim(col8)));
+
+			col91=tranwrd(col9,"$"," ");	
+		    col2 = strip(trt01a);
+		    if col2="PLACEBO" then col2="Placebo";
+		    if col4="SUPPLEMENT FOR HEPATITIS C" then col4="SUPPLEMENT FOR*HEPATITIS C";
+            if col4="birth control" then col4="BIRTH CONTROL";
+		    if CMENRTPT="ONGOING" then col7="Yes";
+			else col7="";
+			*sort=input(CMSTDTC,is8601da.);
+
+run;
+data listing;
+	set listing;
+	%jdrptbk1(col3, 49,*,offset=0);
+	if col3 = "TYLENOL-SINUS (PARACETAMOL,PSEUDOEPHEDRINE*SULFATE) *TYLENOL SINUS*" then col3 = "TYLENOL-SINUS (PARACETAMOL,PSEUDOEPHEDRINE SU*LFATE) *TYLENOL SINUS*";
+run;
+
+
+****************************** creating report***************************************************;
+
+options missing = ' ' nodate nobyline nonumber
+formchar='|_---|+|---+=|-/\<>*' charcode;
+
+%xusprnt1(1);
+
+title%eval(&titlect+2) "&under";
+
+%let fnds=r1;
+
+footnote1 "&under";
+footnote2 "Note: Concomitant medications are mapped according to WhoDrug Q22009.";
+footnote3 "Note: Study Day is relative to administration of the first dose of study drug.";
+footnote4 "    ";
+
+footnote5 "&dtfoot";
+footnote6 "&lstfoot";
+
+
+
+proc report data=listing ls=&ls. ps=&ps. spacing=0 headline headskip nowd  missing nocenter split='*';
+	column   col1 col2 cmstdtn cmendtn cmspid  col3-col5  col91 col7;
+	
+	define cmstdtn /                       group order=internal noprint;
+    define cmendtn /                       group order=internal noprint;
+    define cmspid  /                       group order=internal noprint;
+	define col1 / group "Subject*ID" width=9 center;
+	define col2 / order  "Treatment" width=18 left flow ;
+	define col3 / display "Generic Name*Reported Name" width=47   flow;
+	define col4 /  group flow "Indication"  width=25 spacing=0 left;
+	define col5 / group "Route of*Administration" width=18  /*flow */;
+	define col91/group "Start Date (Study Day)*Stop Date (Study Day)" width=25 left flow;
+	define col7 / display "Ongoing" width=8 center ;
+
+	break after col5 / skip;
+
+run;

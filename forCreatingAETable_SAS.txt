@@ -1,0 +1,146 @@
+*****************************************************************************;
+*Creating AE TABLE************;
+
+
+
+
+libname source "C:\Users\veera\Desktop\aetablepra";
+
+data adsl;
+set source.adsl;
+run;
+data adae;
+set source.adae;
+run;
+
+
+
+libname sasdata "C:\Users\Owner\Desktop\Practice\ss";
+****************************************************************************;
+
+ *count the number of usubjid from adsl data;
+data adsl(keep=usubjid trt);
+     set source.adsl(where=(saffl='Y'));
+     trt=1;
+run;
+
+proc freq data=adsl noprint;
+     tables trt / out=tot(drop=percent rename=(count=tot));
+run;
+
+data _null_;
+     set tot;
+     call symput('t',compress(put(tot,3.)));
+run;
+
+%put &t;
+
+data ae(keep=usubjid trt aebodsys aedecod aesdt aeedt);
+     set source.adae(where=(saffl='Y' and trtemfl='Y'));
+     trt=1;
+run;
+
+proc sort;
+     by usubjid aebodsys aedecod aesdt aeedt;
+run;
+
+data any;
+     set ae;
+     by usubjid ;
+     if first.usubjid;  *to avoid counting each sub twice, we can use nodupkey too;
+run;
+
+data bod;
+     set ae;
+     by usubjid aebodsys;
+     if first.aebodsys;
+run;
+
+data pt;
+     set ae;
+     by usubjid aebodsys aedecod;
+     if first.aedecod;
+run;
+
+proc freq data=any noprint;
+     tables trt / out=any1(drop=percent);
+proc freq data=bod noprint;
+     tables trt*aebodsys / out=bod1(drop=percent);
+proc freq data=pt noprint;
+     tables trt*aebodsys*aedecod / out=pt1(drop=percent);
+run;
+
+data all;
+     set any1 bod1 pt1;
+     length val $ 20 cat $ 200;
+     if aebodsys=' ' then cat='ANY ADVERSE EVENT';
+     else if aebodsys ne ' ' and aedecod=' ' then cat=trim(left(aebodsys));
+     else if aedecod ne ' ' then cat='    ' || trim(left(aedecod));
+     pct=(count/&t)*100;
+     val=put(count,8.) || ' (' || put(pct,5.1) || ')';
+     if aedecod = ' ' then bpct=pct;
+ run;
+
+proc sort data=all(where=(aedecod=' ')) out=bdy ;
+     by descending bpct;
+run;
+
+data bdy(keep=aebodsys ord);
+     set bdy;
+     by descending bpct;
+     ord=_N_;
+     if aebodsys='***UNCODED' then ord=999;
+run;
+
+proc sort data = bdy;
+     by aebodsys ;
+run;
+proc sort data = all;
+     by aebodsys;
+run;
+
+data final;
+     merge all bdy;
+     by aebodsys;
+     if aedecod=' ' then ord1=1;
+     else ord1=2;
+run;
+
+proc sort;
+     by ord ord1 descending pct ;
+run;
+
+data final(drop=cnt cnt1);
+     set final;
+     by ord ord1 descending pct;
+     retain pg  1;
+     cnt+1;
+     if first.ord then cnt1=0;
+     else cnt1+1;
+     if (cnt > 23 and cnt1=0) or cnt > 27 then do;
+             cnt=1;
+             pg+1;
+     end;
+run;
+
+
+ods escapechar='|';
+
+
+ODS rtf FILE = "C:\Users\veera\Desktop\aetablepra\ae.rtf";
+
+proc report data=final nowd spacing=3 center split='|' formchar(2)='_'  missing  headline headskip;
+      column ("__" pg ord aebodsys cat val);
+      define pg / order order=data noprint;
+      define ord / order order=data noprint;
+      define aebodsys  / order order=internal noprint;
+      define cat  /  "System organ class [a]|      Preferred term" left width = 80 ;
+      define val  /  "Rituximab 375 mg/m2 + CMC-544 1.8 mg/m2|n=&t" center width=50;
+      break after aebodsys / skip;
+      break after pg / page;
+run;
+ods rtf close;
+
+** post-process output ***;
+*%m_posttfl;
+

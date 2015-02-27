@@ -1,0 +1,149 @@
+
+// <author>Veera</author>
+// <date>01/20/2015 09:36:18 PM</date>
+// <summary>Implements the PreValidateTicketUpdate Plugin.</summary>
+// Runtime Version:4.0.30319.1
+
+namespace crmticketpluginFeb23v1.Plugins
+{
+    using System;
+    using System.ServiceModel;
+    using Microsoft.Xrm.Sdk;
+    using System.Data.SqlClient;
+    using System.Linq;
+    using System.Data;
+
+    /// <summary>
+    /// PreValidateTicketUpdate Plugin.
+    /// Fires when the following attributes are updated:
+    /// All Attributes
+    /// </summary>    
+    public class PreValidateTicketUpdate: Plugin
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PreValidateTicketUpdate"/> class.
+        /// </summary>
+        /// 
+        //String ConnectionString = "Data Source=OMNI5;Initial Catalog=serialnum;User Id=sa;Password=;";
+
+
+
+        public PreValidateTicketUpdate()
+            : base(typeof(PreValidateTicketUpdate))
+        {
+            base.RegisteredEvents.Add(new Tuple<int, string, string, Action<LocalPluginContext>>(10, "Update", "incident", new Action<LocalPluginContext>(ExecutePreValidateTicketUpdate)));
+
+            // Note : you can register for more events here if this plugin is not specific to an individual entity and message combination.
+            // You may also need to update your RegisterFile.crmregister plug-in registration file to reflect any change.
+        }
+
+        /// <summary>
+        /// Executes the plug-in.
+        /// </summary>
+        /// <param name="localContext">The <see cref="LocalPluginContext"/> which contains the
+        /// <see cref="IPluginExecutionContext"/>,
+        /// <see cref="IOrganizationService"/>
+        /// and <see cref="ITracingService"/>
+        /// </param>
+        /// <remarks>
+        /// For improved performance, Microsoft Dynamics CRM caches plug-in instances.
+        /// The plug-in's Execute method should be written to be stateless as the constructor
+        /// is not called for every invocation of the plug-in. Also, multiple system threads
+        /// could execute the plug-in at the same time. All per invocation state information
+        /// is stored in the context. This means that you should not use global variables in plug-ins.
+        /// </remarks>
+        protected void ExecutePreValidateTicketUpdate(LocalPluginContext localContext)
+        {
+            if (localContext == null)
+            {
+                throw new ArgumentNullException("localContext");
+            }
+
+            // Plug-in business logic starts here.
+           
+            // get the plugin context
+            IPluginExecutionContext context = localContext.PluginExecutionContext;
+            
+            //Get the IOrganizationService
+            IOrganizationService service = localContext.OrganizationService;
+
+            //create the service context
+            //var ServiceContext = new OrganizationServiceContext(service);
+            //ITracingService tracingService = localContext.TracingService;
+
+            if (context.InputParameters.Contains("Target") &&
+                context.InputParameters["Target"] is Entity)
+            {
+                Entity entity = (Entity)context.InputParameters["Target"];
+                if (entity.LogicalName == "incident" && entity.Attributes["ase_serialnumbersnum"] != null)
+                
+                    
+                {
+                    int serialnum = (int)entity.Attributes["ase_serialnumbersnum"];
+                    
+                    try
+                    {
+                    
+                        // get the pre entity image
+        
+                     String connectionString = "Data Source=OMNI5;Initial Catalog=serialnum;User Id=sa;Password=;";
+                     using(SqlConnection _con = new SqlConnection(connectionString))
+                     {
+                         _con.Open();
+
+                         string queryStatement = "SELECT * FROM dbo.seriallist WHERE SNUM = serialnum ";
+                         using (SqlCommand _cmd = new SqlCommand(queryStatement, _con))
+                         {
+                             //DataTable customerTable = new DataTable("seriallist");
+                             //SqlDataAdapter _dap = new SqlDataAdapter(_cmd);
+                             SqlDataReader reader = _cmd.ExecuteReader();
+                             while (reader.Read())
+                             {
+
+
+                                 entity.Attributes["ase_soldto"] = (string)reader["WHO"];
+                                 entity.Attributes["ase_swer"] = (string)reader["ROM"];
+                                 entity.Attributes["ase_invoice"] = (string)reader["INV"];
+                                 entity.Attributes["ase_hwver"] = (string)reader["HWVER"];
+                                 entity.Attributes["ase_notes"] = (string)reader["NOTES"];
+                                 entity.Attributes["ase_catalog"] = (string)reader["PARTNUM"];
+
+
+                                 
+
+                             }
+                         }
+                              
+                        }
+
+                    }
+                    catch (FaultException ex)
+                    {
+
+                        throw new InvalidPluginExecutionException("An errror occurred in the plug-in", ex);
+                    }
+
+			finally
+
+					{
+					//close the reader
+					if (reader != null)
+					{
+					reader.Close();
+					}
+					// close the connection
+					if (_con != null)
+					{
+					_con.Close();
+					}
+
+					}
+
+                }
+
+            }
+
+        }
+    }
+}
+

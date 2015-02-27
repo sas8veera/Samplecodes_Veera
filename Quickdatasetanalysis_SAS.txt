@@ -1,0 +1,124 @@
+/* This SAS macro will populate the variables in the data set, and do mean(numeric variables),
+frequency(character variables) and print report with ODS */
+
+%macro AnalyzeMyDataset(dsn,numobs,varlist);
+
+%let numvars=; /* Initialize the number of numeric Variables */
+
+%let charvars=; /* Initialize the number of character Variables */
+
+%if %upcase(&varlist) eq _ALL_ %then /* If the user request for all the variables then
+
+assign appropriately */
+
+%do;
+
+%let numvars=_numeric_;
+
+%let charvars=_character_;
+
+%end;
+
+%else /* then find if the vars requested are numeric type or character type */
+
+%do;
+
+/* split the varlist into individual macro var names vars1 vars2 etc*/
+
+%let num=1;
+
+%let vars&num=%scan(&varlist,&num,' ');
+
+%do %while(&&vars&num ne );
+
+%let num=%eval(&num + 1);
+
+%let vars&num=%upcase(%scan(&varlist,&num,' '));
+
+%end;
+
+
+%let rc=%sysfunc(close(&dsid));
+
+%put numvarlist=&numvarlist charvarlist=&charvarlist;
+
+/* Now check the variables required to report in the above list and assign them to
+
+the right macro variables...
+
+All char variables in charvarlist macro variables
+
+All Num variables in numvarlist macro variable
+
+*/
+
+%do i=1 %to %eval(&num - 1);
+
+%if %index(&numvarlist,&&vars&i) %then %let numvars=&&vars&i &numvars;
+
+%if %index(&charvarlist,&&vars&i) %then %let charvars=&&vars&i &charvars;
+
+%end;
+
+%put numvars=&numvars charvars=&charvars;
+
+%end;
+
+ods listing close;
+
+ods html body="&htmlfilepath";
+
+/* Now analyze the dataset with the Specified variables */
+
+proc contents data=&dsn;run; /* Put a Contents procedure */
+
+%if &numvars ne %then
+
+%do;
+
+/* Get Summary statistics of All the Numeric Variables with means procedure */
+
+proc means data=&dsn(obs=&numobs) n mean max min range;
+
+var &numvars;
+
+title 'Summary Statistics of all Numeric variables in the dataset';
+
+run;
+
+%end;
+
+%if &charvars ne %then
+
+%do;
+
+/* Get Summary statistics of All the Character Variables with Freq procedure */
+
+proc freq data=&dsn(obs=&numobs);
+
+tables &charvars;
+
+title1 'Summary Statistics of all Character variables in the dataset';
+
+run;
+
+%end;
+
+ods html close;
+
+%mend AnalyzeMyDataset;
+
+********************************************************************************
+
+/* Edit the Path of the Output Report */
+
+%let htmlfilepath=C:\Users\veera\Desktop\SAS2;
+
+/* Get the List of variables in the &dsn dataset and put
+
+All char variables in charvarlist macro variables
+
+All Num variables in numvarlist macro variable
+
+*/
+
